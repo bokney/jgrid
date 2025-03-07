@@ -46,8 +46,7 @@ def sample_response():
             "quote": 455767,
         },
         "pairCreatedAt": 1723699294000,
-    },
-    {
+    }, {
         "chainId": "solana",
         "dexId": "raydium",
         "url": (
