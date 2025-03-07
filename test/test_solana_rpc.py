@@ -5,7 +5,7 @@ from src.solana_rpc import SolanaRPC
 
 class MockClient:
     def __init__(self, rpc_url):
-        self._rpc_url = rpc_url
+        self._RPC_URL = rpc_url
 
 
 class TestSolanaRPC:
@@ -16,7 +16,7 @@ class TestSolanaRPC:
         monkeypatch.setattr("src.solana_rpc.Client", MockClient)
         client = SolanaRPC.get_client()
         assert isinstance(client, MockClient)
-        assert client._rpc_url == SolanaRPC._rpc_url
+        assert client._RPC_URL == SolanaRPC._RPC_URL
 
     def test_client_is_singleton(self, monkeypatch):
         monkeypatch.setattr("src.solana_rpc.Client", MockClient)
