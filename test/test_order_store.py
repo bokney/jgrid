@@ -3,7 +3,7 @@ import pytest
 import sqlite3
 from pathlib import Path
 from decimal import Decimal
-from datetime import datetime, timezone
+from datetime import datetime
 from src.order_store import OrderStore
 from src.orders import ClosedOrder, Trade
 
@@ -50,7 +50,7 @@ class TestOrderStore:
             productMeta="Metadata for trade 2"
         )
 
-        total_input = trade1.inputAmount + trade2.inputAmount 
+        total_input = trade1.inputAmount + trade2.inputAmount
         total_output = trade1.outputAmount + trade2.outputAmount
 
         closed_order = ClosedOrder(
@@ -198,7 +198,8 @@ class TestOrderStore:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT * FROM closed_orders WHERE orderKey = ?", ("order_key",)
+                "SELECT * FROM closed_orders WHERE orderKey = ?",
+                ("order_key",)
             )
             row = cursor.fetchone()
             assert row is not None
@@ -302,7 +303,9 @@ class TestOrderStore:
                 ("non_existent_order_key",)
             )
             trade_row = cursor.fetchone()
-            assert trade_row is None, "Trade should not be inserted for a non-existent orderKey."
+            assert trade_row is None, (
+                "Trade should not be inserted for a non-existent orderKey."
+            )
 
     def test_store_closed_order_datetime_fields_converted_to_iso(
         self, order_store, test_db
@@ -346,7 +349,9 @@ class TestOrderStore:
             except ValueError:
                 pytest.fail("Datetime fields not in valid ISO 8601 format.")
 
-    def test_store_closed_order_decimal_fields_stored_as_str(self, order_store, test_db):
+    def test_store_closed_order_decimal_fields_stored_as_str(
+        self, order_store, test_db
+    ):
         closed_order = ClosedOrder(
             userPubkey="user_pubkey",
             orderKey="order_key",
@@ -371,7 +376,10 @@ class TestOrderStore:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT makingAmount, takingAmount FROM closed_orders WHERE orderKey = ?",
+                (
+                    "SELECT makingAmount, takingAmount "
+                    "FROM closed_orders WHERE orderKey = ?"
+                ),
                 ("order_key",)
             )
             row = cursor.fetchone()
@@ -382,9 +390,13 @@ class TestOrderStore:
                 assert Decimal(row["makingAmount"]) == Decimal("10.12345678")
                 assert Decimal(row["takingAmount"]) == Decimal("9.87654321")
             except (ValueError, ArithmeticError):
-                pytest.fail("Decimal fields not stored as valid numeric strings.")
+                pytest.fail(
+                    "Decimal fields not stored as valid numeric strings."
+                )
 
-    def test_store_trade_decimal_fields_stored_as_str(self, order_store, test_db):
+    def test_store_trade_decimal_fields_stored_as_str(
+        self, order_store, test_db
+    ):
         trade = Trade(
             orderKey="order_key",
             keeper="keeper",
@@ -547,7 +559,8 @@ class TestOrderStore:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT * FROM closed_orders WHERE orderKey = ?", ("order_key",)
+                "SELECT * FROM closed_orders WHERE orderKey = ?",
+                ("order_key",)
             )
             row = cursor.fetchone()
             assert row is not None
