@@ -20,7 +20,7 @@ def order_store(test_db):
 
 
 class TestOrderStore:
-    def test_get_order_retrieves_stored_order(self, order_store):
+    def test_load_closed_order_retrieves_stored_order(self, order_store):
         trade1 = Trade(
             orderKey="order_key",
             keeper="keeper",
@@ -72,8 +72,8 @@ class TestOrderStore:
             trades=[trade1, trade2]
         )
 
-        order_store.store_closed_order(closed_order)
-        retrieved_order = order_store.get_order("order_key")
+        order_store.save_closed_order(closed_order)
+        retrieved_order = order_store.load_closed_order("order_key")
 
         assert retrieved_order is not None
         assert isinstance(retrieved_order, ClosedOrder)
@@ -94,7 +94,7 @@ class TestOrderStore:
         assert retrieved_order.trades[0].outputAmount == Decimal("9.5")
         assert retrieved_order.trades[1].outputAmount == Decimal("4.8")
 
-    def test_get_order_returns_correct_trades(self, order_store):
+    def test_load_closed_order_returns_correct_trades(self, order_store):
         trade1 = Trade(
             orderKey="order_key",
             keeper="keeperA",
@@ -161,20 +161,20 @@ class TestOrderStore:
             programVersion="v1.0",
             trades=trades
         )
-        order_store.store_closed_order(closed_order)
-        retrieved_order = order_store.get_order("order_key")
+        order_store.save_closed_order(closed_order)
+        retrieved_order = order_store.load_closed_order("order_key")
 
         assert len(retrieved_order.trades) == 3
         retrieved_txids = {trade.txId for trade in retrieved_order.trades}
         expected_txids = {"TX001", "TX002", "TX003"}
         assert retrieved_txids == expected_txids
 
-    def test_get_order_returns_none_for_missing_order(self, order_store):
+    def test_load_closed_order_returns_none_for_missing_order(self, order_store):
         missing_key = "nonexistent_order"
-        retrieved_order = order_store.get_order(missing_key)
+        retrieved_order = order_store.load_closed_order(missing_key)
         assert retrieved_order is None
 
-    def test_store_closed_order_saves_to_db(self, order_store, test_db):
+    def test_save_closed_order_saves_to_db(self, order_store, test_db):
         closed_order = ClosedOrder(
             userPubkey="user_pubkey",
             orderKey="order_key",
@@ -193,7 +193,7 @@ class TestOrderStore:
             programVersion="v1.0",
             trades=[]
         )
-        order_store.store_closed_order(closed_order)
+        order_store.save_closed_order(closed_order)
         with sqlite3.connect(test_db) as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
@@ -205,7 +205,7 @@ class TestOrderStore:
             assert row is not None
             assert row["userPubkey"] == "user_pubkey"
 
-    def test_store_closed_order_with_no_trades_succeeds(self, order_store):
+    def test_save_closed_order_with_no_trades_succeeds(self, order_store):
         closed_order = ClosedOrder(
             userPubkey="user_pubkey",
             orderKey="order_key",
@@ -224,12 +224,12 @@ class TestOrderStore:
             programVersion="v1.0",
             trades=[]
         )
-        order_store.store_closed_order(closed_order)
-        retrieved_order = order_store.get_order("order_key")
+        order_store.save_closed_order(closed_order)
+        retrieved_order = order_store.load_closed_order("order_key")
         assert retrieved_order is not None
         assert retrieved_order.trades == []
 
-    def test_store_closed_order_duplicate_closed_order_fails(
+    def test_save_closed_order_duplicate_closed_order_fails(
         self, order_store
     ):
         closed_order = ClosedOrder(
@@ -250,12 +250,11 @@ class TestOrderStore:
             programVersion="v1.0",
             trades=[]
         )
-        order_store.store_closed_order(closed_order)
+        order_store.save_closed_order(closed_order)
         with pytest.raises(sqlite3.IntegrityError):
-            order_store.store_closed_order(closed_order)
+            order_store.save_closed_order(closed_order)
 
-    @pytest.mark.skip()
-    def test_store_closed_order_trade_missing_closed_order_fails(
+    def test_save_closed_order_trade_missing_closed_order_fails(
         self, order_store, test_db
     ):
         trade = Trade(
@@ -293,7 +292,7 @@ class TestOrderStore:
         )
 
         with pytest.raises(sqlite3.IntegrityError):
-            order_store.store_closed_order(closed_order)
+            order_store.save_closed_order(closed_order)
 
         with sqlite3.connect(test_db) as conn:
             conn.row_factory = sqlite3.Row
@@ -303,11 +302,9 @@ class TestOrderStore:
                 ("non_existent_order_key",)
             )
             trade_row = cursor.fetchone()
-            assert trade_row is None, (
-                "Trade should not be inserted for a non-existent orderKey."
-            )
+            assert trade_row is None
 
-    def test_store_closed_order_datetime_fields_converted_to_iso(
+    def test_save_closed_order_datetime_fields_converted_to_iso(
         self, order_store, test_db
     ):
         closed_order = ClosedOrder(
@@ -328,7 +325,7 @@ class TestOrderStore:
             programVersion="v1.0",
             trades=[]
         )
-        order_store.store_closed_order(closed_order)
+        order_store.save_closed_order(closed_order)
         with sqlite3.connect(test_db) as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
@@ -349,7 +346,7 @@ class TestOrderStore:
             except ValueError:
                 pytest.fail("Datetime fields not in valid ISO 8601 format.")
 
-    def test_store_closed_order_decimal_fields_stored_as_str(
+    def test_save_closed_order_decimal_fields_stored_as_str(
         self, order_store, test_db
     ):
         closed_order = ClosedOrder(
@@ -370,7 +367,7 @@ class TestOrderStore:
             programVersion="v1.0",
             trades=[]
         )
-        order_store.store_closed_order(closed_order)
+        order_store.save_closed_order(closed_order)
 
         with sqlite3.connect(test_db) as conn:
             conn.row_factory = sqlite3.Row
@@ -429,7 +426,7 @@ class TestOrderStore:
             programVersion="v1.0",
             trades=[trade]
         )
-        order_store.store_closed_order(closed_order)
+        order_store.save_closed_order(closed_order)
 
         with sqlite3.connect(test_db) as conn:
             conn.row_factory = sqlite3.Row
@@ -455,7 +452,7 @@ class TestOrderStore:
                     "Trade decimal fields not stored as valid numeric strings."
                 )
 
-    def test_store_closed_order_atomicity_rolls_back_on_trade_failure(
+    def test_save_closed_order_atomicity_rolls_back_on_trade_failure(
         self, order_store, test_db
     ):
         valid_trade = Trade(
@@ -505,9 +502,9 @@ class TestOrderStore:
             trades=[valid_trade, invalid_trade]
         )
         with pytest.raises(sqlite3.IntegrityError):
-            order_store.store_closed_order(closed_order)
+            order_store.save_closed_order(closed_order)
 
-        assert order_store.get_order("order_key") is None
+        assert order_store.load_closed_order("order_key") is None
 
     def test_order_exists_returns_true_for_stored_order(self, order_store):
         closed_order = ClosedOrder(
@@ -528,7 +525,7 @@ class TestOrderStore:
             programVersion="v1.0",
             trades=[]
         )
-        order_store.store_closed_order(closed_order)
+        order_store.save_closed_order(closed_order)
         assert order_store.order_exists("order_key") is True
 
     def test_order_exists_returns_false_for_missing_order(self, order_store):
@@ -554,7 +551,7 @@ class TestOrderStore:
             programVersion="v1.0",
             trades=[]
         )
-        order_store.store_closed_order(closed_order)
+        order_store.save_closed_order(closed_order)
         with sqlite3.connect(test_db) as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
