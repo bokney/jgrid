@@ -3,7 +3,7 @@ import pytest
 from uuid import uuid4
 from decimal import Decimal
 from unittest.mock import patch, MagicMock
-from src.order_manager import OrderManager
+from src.order_manager import OrderManager, OrderStatus
 from src.tokens import Token
 
 
@@ -19,6 +19,7 @@ def order_manager():
         manager._order_store = mock_store
         yield manager
 
+
 @pytest.fixture
 def patched_order_manager():
     with patch.object(
@@ -30,7 +31,7 @@ def patched_order_manager():
     ) as mock_closed, patch.object(
         OrderManager, "_order_cancelled_observer", new_callable=MagicMock
     ) as mock_cancelled:
-        om = OrderManager()  
+        om = OrderManager()
         yield (
             om,
             mock_created,
@@ -38,6 +39,7 @@ def patched_order_manager():
             mock_closed,
             mock_cancelled
         )
+
 
 @pytest.fixture
 def usdc():
@@ -47,6 +49,7 @@ def usdc():
         symbol="USDC",
         decimals=6
     )
+
 
 @pytest.fixture
 def fartcoin():
@@ -105,6 +108,7 @@ class TestPlaceOrder:
                 volume=Decimal("100.00"),
                 price=Decimal("0")
             )
+        order_id = order_id
 
     def test_place_order_no_duplication(self):
         def mock_place_order(*args, **kwargs):
@@ -124,29 +128,84 @@ class TestPlaceOrder:
 
         assert len(orders) == len(set(orders))
 
+
 class TestCancelOrder:
-    @pytest.mark.skip
-    def test_cancel_order_successful(self):
-        pass
+    def test_cancel_order_successful(self, order_manager, usdc, fartcoin):
+        order_id = order_manager.place_order(
+            base=usdc,
+            quote=fartcoin,
+            volume=Decimal("100.00"),
+            price=Decimal("16000")
+        )
 
-    @pytest.mark.skip
+        order = next(
+            order for order in order_manager.open_orders
+            if order.publicKey == order_id
+        )
+
+        order_manager.cancel_order(order)
+
+        assert order.status == OrderStatus.CANCELLED
+        assert order.publicKey not in [
+            o.publicKey for o in order_manager.open_orders
+        ]
+
+        order_manager._order_store.save_order.assert_called_with(order)
+        order_manager._jupiter_api.cancel_order.assert_called_once()
+
     def test_cancel_order_can_only_cancel_once(self):
-        # could test whether observer is called more than once too
-        pass
+        order_id = order_manager.place_order(
+            base=usdc,
+            quote=fartcoin,
+            volume=Decimal("100.00"),
+            price=Decimal("16000")
+        )
 
-    @pytest.mark.skip
+        order = next(
+            order for order in order_manager.open_orders
+            if order.publicKey == order_id
+        )
+
+        order_manager.cancel_order(order)
+
+        with pytest.raises(Exception):
+            order_manager.cancel_order(order)
+
+        assert order.status == OrderStatus.CANCELLED
+        order_manager._jupiter_api.cancel_order.assert_called_once()
+
     def test_cancel_order_order_does_not_exist(self):
-        pass
+        invalid_order = MagicMock()
+        invalid_order.publicKey = str(uuid4())
+
+        with pytest.raises(Exception):
+            order_manager.cancel_order(invalid_order)
+
+        assert invalid_order.publicKey not in [
+            o.publicKey for o in order_manager.open_orders
+        ]
+        order_manager._jupiter_api.cancel_order.assert_not_called()
 
 
 class TestGetOrderStatus:
-    @pytest.mark.skip
-    def test_get_order_status_success(self):
-        pass
+    def test_get_order_status_success(elf, order_manager, usdc, fartcoin):
+        order_id = order_manager.place_order(
+            base=usdc,
+            quote=fartcoin,
+            volume=Decimal("100.00"),
+            price=Decimal("16000")
+        )
 
-    @pytest.mark.skip
-    def test_get_order_status_order_does_not_exist(self):
-        pass
+        status = order_manager.get_order_status(order_id)
+
+        assert status == OrderStatus.CREATED
+
+    def test_get_order_status_order_does_not_exist(self, order_manager):
+        non_existent_order_id = str(uuid4())
+
+        status = order_manager.get_order_status(non_existent_order_id)
+
+        assert status is None
 
 
 class TestUpdateOrders:
