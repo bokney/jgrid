@@ -8,7 +8,6 @@ def event_dispatcher():
     return EventDispatcher[str]()
 
 
-
 @pytest.fixture
 def keyed_event_dispatcher():
     return KeyedEventDispatcher[str, str]()
