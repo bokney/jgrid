@@ -3,12 +3,13 @@ import pytest
 from decimal import Decimal
 from datetime import datetime
 from pydantic_core import ValidationError
-from src.orders import OpenOrder, Trade, ClosedOrder
+from src.jupiter_api import OpenOrder, Trade, ClosedOrder
 
 
 class TestOpenOrder:
     def test_open_order_creation_success(self):
         order = OpenOrder(
+            publicKey="public_key",
             borrowMakingAmount=Decimal("100.0"),
             createdAt=datetime.now(),
             expiredAt=datetime.now(),
