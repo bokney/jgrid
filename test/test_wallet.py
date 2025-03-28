@@ -95,10 +95,10 @@ class TestWallet:
         assert wallet.keypair is dummy_keypair
 
     def test_wallet_accepts_either_address_or_keypair_but_not_both(self):
-        wallet_a = Wallet(address=str(Pubkey.new_unique()))
-        wallet_b = Wallet(keypair=Keypair())
+        _ = Wallet(address=str(Pubkey.new_unique()))
+        _ = Wallet(keypair=Keypair())
         with pytest.raises(ValidationError):
-            wallet_c = Wallet(
+            _ = Wallet(
                 address=str(Pubkey.new_unique()),
                 keypair=Keypair()
             )
