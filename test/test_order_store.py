@@ -5,7 +5,7 @@ from pathlib import Path
 from decimal import Decimal
 from datetime import datetime
 from src.order_store import OrderStore
-from src.order_models import ClosedOrder, Trade
+from src.jupiter_api import ClosedOrder, Trade
 
 
 @pytest.fixture

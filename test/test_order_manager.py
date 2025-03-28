@@ -5,7 +5,7 @@ from decimal import Decimal
 from datetime import datetime
 from unittest.mock import patch, MagicMock
 from src.order_manager import OrderManager, OrderStatus
-from src.order_models import OpenOrder, ClosedOrder
+from src.jupiter_api import OpenOrder, ClosedOrder
 from src.order_store import OrderStore
 from src.tokens import Token
 from mock_api_responses import (
