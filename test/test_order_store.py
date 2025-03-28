@@ -5,7 +5,7 @@ from pathlib import Path
 from decimal import Decimal
 from datetime import datetime
 from src.order_store import OrderStore
-from src.orders import ClosedOrder, Trade
+from src.order_models import ClosedOrder, Trade
 
 
 @pytest.fixture
@@ -169,7 +169,9 @@ class TestOrderStore:
         expected_txids = {"TX001", "TX002", "TX003"}
         assert retrieved_txids == expected_txids
 
-    def test_load_closed_order_returns_none_for_missing_order(self, order_store):
+    def test_load_closed_order_returns_none_for_missing_order(
+        self, order_store
+    ):
         missing_key = "nonexistent_order"
         retrieved_order = order_store.load_closed_order(missing_key)
         assert retrieved_order is None
