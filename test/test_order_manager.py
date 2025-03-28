@@ -2,38 +2,28 @@
 import pytest
 from uuid import uuid4
 from decimal import Decimal
+from datetime import datetime
 from unittest.mock import patch, MagicMock
 from src.order_manager import OrderManager, OrderStatus
+from src.order_models import OpenOrder, ClosedOrder
+from src.order_store import OrderStore
 from src.tokens import Token
-
-
-@pytest.fixture
-def order_manager():
-    manager = OrderManager()
-    manager._jupiter_api = MagicMock()
-    manager._order_store = MagicMock()
-    yield manager
-
+from mock_api_responses import (
+    MOCK_GET_OPEN_ORDERS,
+    MOCK_GET_ORDER_HISTORY_PAGE_1,
+    MOCK_GET_ORDER_HISTORY_PAGE_2
+)
 
 @pytest.fixture
-def patched_order_manager():
-    with patch.object(
-        OrderManager, "_order_created_observer", new_callable=MagicMock
-    ) as mock_created, patch(
-        OrderManager, "_order_updated_observer", new_callable=MagicMock
-    ) as mock_updated, patch.object(
-        OrderManager, "_order_closed_observer", new_callable=MagicMock
-    ) as mock_closed, patch.object(
-        OrderManager, "_order_cancelled_observer", new_callable=MagicMock
-    ) as mock_cancelled:
-        om = OrderManager()
-        yield (
-            om,
-            mock_created,
-            mock_updated,
-            mock_closed,
-            mock_cancelled
-        )
+def order_manager(tmp_path):
+    db_path = tmp_path / "test_orders.db"
+    order_store = OrderStore(db_path)
+
+    om = OrderManager()
+    om._jupiter_api = MagicMock()
+    om._order_store = order_store
+
+    yield om
 
 
 @pytest.fixture
@@ -161,141 +151,315 @@ class TestCancelOrder:
 
 
 class TestGetOrderStatus:
-    @pytest.mark.skip
-    def test_get_order_status_success(self, order_manager, usdc, fartcoin):
+    def test_get_order_status_open(self, order_manager, usdc, fartcoin):
         order_id = order_manager.place_order(
             base=usdc,
             quote=fartcoin,
             volume=Decimal("100.00"),
             price=Decimal("16000")
         )
-
         status = order_manager.get_order_status(order_id)
+        assert status == OrderStatus.OPEN
 
-        assert status == OrderStatus.CREATED
+    def test_get_order_status_partially_filled(
+        self, order_manager, usdc, fartcoin
+    ):
+        order_id = order_manager.place_order(
+            base=usdc,
+            quote=fartcoin,
+            volume=Decimal("100.00"),
+            price=Decimal("16000")
+        )
+        order = next(
+            o for o in order_manager.open_orders if o.publicKey == order_id
+        )
+        order.makingAmount = Decimal("60.00")
+        status = order_manager.get_order_status(order_id)
+        assert status == OrderStatus.PARTIALLY_FILLED
 
-    @pytest.mark.skip
+    def test_get_order_status_closed(self, order_manager, usdc, fartcoin):
+        closed_order = ClosedOrder(
+            userPubkey="user_pubkey",
+            orderKey="order_key",
+            inputMint=usdc.address,
+            outputMint=fartcoin.address,
+            makingAmount=Decimal("1.0"),
+            takingAmount=Decimal("2.0"),
+            remainingMakingAmount=Decimal("0.0"),
+            remainingTakingAmount=Decimal("0.0"),
+            expiredAt=None,
+            createdAt=datetime.now(),
+            updatedAt=datetime.now(),
+            status="closed",
+            openTx="OPENTX123",
+            closeTx="CLOSETX456",
+            programVersion="v1.0",
+            trades=[],
+        )
+
+        with patch.object(
+            order_manager._order_store,
+            "load_closed_order",
+            return_value=closed_order
+        ):
+            status = order_manager.get_order_status("order_key")
+
+        assert status == OrderStatus.CLOSED
+
+    def test_get_order_status_cancelled(self, order_manager, usdc, fartcoin):
+        closed_order = ClosedOrder(
+            userPubkey="user_pubkey",
+            orderKey="order_key",
+            inputMint=usdc.address,
+            outputMint=fartcoin.address,
+            makingAmount=Decimal("1.0"),
+            takingAmount=Decimal("2.0"),
+            remainingMakingAmount=Decimal("0.5"),
+            remainingTakingAmount=Decimal("1.0"),
+            expiredAt=None,
+            createdAt=datetime.now(),
+            updatedAt=datetime.now(),
+            status="cancelled",
+            openTx="OPENTX123",
+            closeTx="CLOSETX456",
+            programVersion="v1.0",
+            trades=[],
+        )
+
+        with patch.object(
+            order_manager._order_store,
+            "load_closed_order",
+            return_value=closed_order
+        ):
+            status = order_manager.get_order_status("order_key")
+
+        assert status == OrderStatus.CANCELLED
+
     def test_get_order_status_order_does_not_exist(self, order_manager):
         non_existent_order_id = str(uuid4())
-
         status = order_manager.get_order_status(non_existent_order_id)
-
         assert status is None
 
 
 class TestUpdateOrders:
-    @pytest.mark.skip
-    def test_update_orders_transitions_open_to_partially_filled(self):
-        pass
+    def test_update_orders_triggers_order_closed_observer(self, order_manager):
+        preloaded_order = {
+            "account": {
+                "borrowMakingAmount": "0",
+                "createdAt":
+                    datetime.fromisoformat("2024-03-06 11:58:19+00:00"),
+                "expiredAt":
+                    datetime.fromisoformat("2024-03-09 11:58:13+00:00"),
+                "makingAmount": Decimal("1665"),
+                "oriMakingAmount": Decimal("1665"),
+                "takingAmount": Decimal("67.4325"),
+                "oriTakingAmount": Decimal("67.4325"),
+                "uniqueId": 0,
+                "updatedAt":
+                    datetime.fromisoformat("2024-03-06 11:59:16+00:00"),
+                "feeAccount": "",
+                "inputMint": "6ogzHhzdrQr9Pgv6hZ2MNze7UrzBMAFyBBWUYp1Fhitx",
+                "inputMintReserve": "",
+                "inputTokenProgram": "",
+                "maker": "B2QXpgPZA1FAxcNwfe2SdBeTkNeMqhVPurpoUxQ9P1Qt",
+                "outputMint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGKwyTDt1v",
+                "outputTokenProgram": "",
+                "feeBps": 0,
+                "bump": 0,
+            },
+            "publicKey": "2Y2g4DimTfAaSc95B5GGYAVz8nhUB2X7p21uUTY226Jd"
+        }
 
-    @pytest.mark.skip
-    def test_update_orders_transitions_open_to_filled(self):
-        pass
+        account_data = preloaded_order["account"]
+        public_key = preloaded_order["publicKey"]
 
-    @pytest.mark.skip
-    def test_update_orders_transitions_open_to_cancelled(self):
-        pass
+        order_data = {**account_data, "publicKey": public_key}
+        open_order = OpenOrder(**order_data)
 
-    @pytest.mark.skip
-    def test_update_orders_transitions_partially_filled_to_filled(self):
-        pass
+        order_manager.open_orders = [open_order]
 
-    @pytest.mark.skip
-    def test_update_orders_transitions_partially_filled_to_cancelled(self):
-        pass
+        order_manager._jupiter_api.get_open_orders.return_value = []
 
-    @pytest.mark.skip
-    def test_update_orders_transitions_multiple_orders_correctly(self):
-        pass
-
-    @pytest.mark.skip
-    def test_update_orders_does_nothing_if_no_state_change(self):
-        pass
-
-    @pytest.mark.skip
-    def test_update_orders_handles_unknown_order_state_gracefully(self):
-        pass
-
-    @pytest.mark.skip
-    def test_update_orders_handles_api_failure_without_crashing(self):
-        pass
-
-    @pytest.mark.skip
-    def test_update_orders_handles_database_failure_gracefully(self):
-        pass
-
-    @pytest.mark.skip
-    def test_update_orders_ignores_orders_already_closed_or_cancelled(self):
-        pass
-
-    @pytest.mark.skip
-    def test_update_orders_processes_large_number_of_orders_efficiently(self):
-        pass
-
-
-    @pytest.mark.skip
-    def test_order_created_observer_invoked_successfully(
-        self, order_manager, usdc, fartcoin
-    ):
-        om, mock_created, _, _, _ = patched_order_manager
-        callback = MagicMock()
-        om.register_order_created_observer(callback)
-        order_id = om.place_order(
-            base=usdc,
-            quote=fartcoin,
-            vol=Decimal("0.01"),
-            price=Decimal("200")
+        order_manager._jupiter_api.get_order_history.return_value = (
+            MOCK_GET_ORDER_HISTORY_PAGE_2
         )
-        callback.assert_called_once()
-        notified_order = callback.call_args[0][0]
-        assert notified_order.publicKey == order_id
 
-    @pytest.mark.skip
-    def test_order_created_observer_multiple_observers(self):
-        pass
+        with patch.object(
+            order_manager, "_notify_order_closed"
+        ) as mock_notify:
+            order_manager.update_orders()
+            expected_call_count = len(MOCK_GET_ORDER_HISTORY_PAGE_2["orders"])
+            assert mock_notify.call_count == expected_call_count
 
-    @pytest.mark.skip
-    def test_order_created_observer_no_observers(self):
-        pass
+            notified_keys = [call[0][0] for call in mock_notify.call_args_list]
+            expected_keys = [
+                order["orderKey"]
+                for order in MOCK_GET_ORDER_HISTORY_PAGE_2["orders"]
+            ]
+            assert set(notified_keys) == set(expected_keys)
 
+    def test_update_orders_paginates_order_history(self, order_manager):
+        order_manager._jupiter_api.get_open_orders.return_value = []
+        order_manager._jupiter_api.get_order_history.side_effect = [
+            MOCK_GET_ORDER_HISTORY_PAGE_1,
+            MOCK_GET_ORDER_HISTORY_PAGE_2
+        ]
 
-class TestOrderUpdatedObserver:
-    @pytest.mark.skip
-    def test_order_updated_observer_invoked_successfully(self):
-        pass
+        order_manager.update_orders()
 
-    @pytest.mark.skip
-    def test_order_updated_observer_multiple_observers(self):
-        pass
+        assert order_manager._jupiter_api.get_order_history.call_count == 2
 
-    @pytest.mark.skip
-    def test_order_updated_observer_no_observers(self):
-        pass
+    def test_update_orders_ignores_orders_already_closed_or_cancelled(
+        self, order_manager
+    ):
+        preloaded_order = {
+            "account": {
+                "borrowMakingAmount": "0",
+                "createdAt":
+                    datetime.fromisoformat("2024-03-06 11:58:19+00:00"),
+                "expiredAt":
+                    datetime.fromisoformat("2024-03-09 11:58:13+00:00"),
+                "makingAmount": Decimal("1665"),
+                "oriMakingAmount": Decimal("1665"),
+                "takingAmount": Decimal("67.4325"),
+                "oriTakingAmount": Decimal("67.4325"),
+                "uniqueId": 0,
+                "updatedAt":
+                    datetime.fromisoformat("2024-03-06 11:59:16+00:00"),
+                "feeAccount": "",
+                "inputMint": "6ogzHhzdrQr9Pgv6hZ2MNze7UrzBMAFyBBWUYp1Fhitx",
+                "inputMintReserve": "",
+                "inputTokenProgram": "",
+                "maker": "B2QXpgPZA1FAxcNwfe2SdBeTkNeMqhVPurpoUxQ9P1Qt",
+                "outputMint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGKwyTDt1v",
+                "outputTokenProgram": "",
+                "feeBps": 0,
+                "bump": 0,
+            },
+            "publicKey": "2Y2g4DimTfAaSc95B5GGYAVz8nhUB2X7p21uUTY226Jd"
+        }
+
+        account_data = preloaded_order["account"]
+        public_key = preloaded_order["publicKey"]
+
+        order_data = {**account_data, "publicKey": public_key}
+        open_order = OpenOrder(**order_data)
+
+        order_manager.open_orders = [open_order]
+
+        order_manager._jupiter_api.get_open_orders.return_value = [
+            preloaded_order
+        ]
+
+        closed_order_data = {
+            "orderKey": "ORDER_KEY_123",
+            "userPubkey": "B2QXpgPZA1FAxcNwfe2SdBeTkNeMqhVPurpoUxQ9P1Qt",
+            "inputMint": "6ogzHhzdrQr9Pgv6h2MNze7UrzBMAFyBBWUYp1Fhitx",
+            "outputMint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGKwyTDt1v",
+            "makingAmount": "1665",
+            "takingAmount": "67.4325",
+            "remainingMakingAmount": "0",
+            "remainingTakingAmount": "0",
+            "expiredAt": "2024-03-09 11:58:13+00:00",
+            "createdAt": "2024-03-06 11:58:19+00:00",
+            "updatedAt": "2024-03-06 11:59:16+00:00",
+            "status": "cancelled",
+            "openTx": "SOME_OPENTX",
+            "closeTx": "SOME_CLOSETX",
+            "programVersion": "v1.0",
+            "trades": []
+        }
+        order_manager._jupiter_api.get_order_history.return_value = {
+            "hasMoreData": "false",
+            "orders": [closed_order_data]
+        }
+
+        order_manager._order_store.order_exists = MagicMock(return_value=True)
+        
+        with patch.object(order_manager, "_notify_order_closed") as mock_notify:
+            order_manager.update_orders()
+            mock_notify.assert_not_called()
+        
+        remaining_open_keys = {o.publicKey for o in order_manager.open_orders}
+        assert "2Y2g4DimTfAaSc95B5GGYAVz8nhUB2X7p21uUTY226Jd" in remaining_open_keys
 
 
 class TestOrderClosedObserver:
-    @pytest.mark.skip
-    def test_order_closed_observer_invoked_successfully(self):
-        pass
+    def test_order_closed_observer_invoked_successfully(
+        self, order_manager, usdc, fartcoin
+    ):
+        notifications = []
 
-    @pytest.mark.skip
-    def test_order_closed_observer_multiple_observers(self):
-        pass
+        def observer():
+            notifications.append("order123")
 
-    @pytest.mark.skip
-    def test_order_closed_observer_no_observers(self):
-        pass
+        order_manager._order_closed_observer.register("order123", observer)
+
+        dummy_closed_order = ClosedOrder(
+            userPubkey="dummy_user",
+            orderKey="order123",
+            inputMint=usdc.address,
+            outputMint=fartcoin.address,
+            makingAmount=Decimal("100"),
+            takingAmount=Decimal("100"),
+            remainingMakingAmount=Decimal("0"),
+            remainingTakingAmount=Decimal("0"),
+            expiredAt=None,
+            createdAt=datetime.now(),
+            updatedAt=datetime.now(),
+            status="closed",
+            openTx="dummy_opentx",
+            closeTx="dummy_closetx",
+            programVersion="v1",
+            trades=[]
+        )
+
+        order_manager._notify_order_closed("order123")
+        assert "order123" in notifications
+
+    def test_order_closed_observer_replaces_previous(
+        self, order_manager, usdc, fartcoin
+    ):
+        notifications1 = []
+        notifications2 = []
+
+        def observer1():
+            notifications1.append("order456")
+
+        def observer2():
+            notifications2.append("order456")
+
+        order_manager._order_closed_observer.register("order456", observer1)
+        order_manager._order_closed_observer.register("order456", observer2)
+
+        order_manager._notify_order_closed("order456")
+
+        assert "order456" not in notifications1
+        assert "order456" in notifications2
 
 
-class TestOrderCancelledObserver:
-    @pytest.mark.skip
-    def test_order_cancelled_observer_invoked_successfully(self):
-        pass
-
-    @pytest.mark.skip
-    def test_order_cancelled_observer_multiple_observers(self):
-        pass
-
-    @pytest.mark.skip
-    def test_order_cancelled_observer_no_observers(self):
-        pass
+    def test_order_closed_observer_no_observers(
+        self, order_manager, usdc, fartcoin
+    ):
+        dummy_closed_order = ClosedOrder(
+            userPubkey="dummy_user",
+            orderKey="order789",
+            inputMint=usdc.address,
+            outputMint=fartcoin.address,
+            makingAmount=Decimal("300"),
+            takingAmount=Decimal("300"),
+            remainingMakingAmount=Decimal("0"),
+            remainingTakingAmount=Decimal("0"),
+            expiredAt=None,
+            createdAt=datetime.now(),
+            updatedAt=datetime.now(),
+            status="closed",
+            openTx="dummy_opentx",
+            closeTx="dummy_closetx",
+            programVersion="v1",
+            trades=[]
+        )
+        try:
+            order_manager._notify_order_closed("order789")
+        except Exception as e:
+            pytest.fail(f"_notify_order_closed raised an exception: {e}")
