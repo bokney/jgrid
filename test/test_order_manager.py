@@ -9,10 +9,10 @@ from src.order_models import OpenOrder, ClosedOrder
 from src.order_store import OrderStore
 from src.tokens import Token
 from mock_api_responses import (
-    MOCK_GET_OPEN_ORDERS,
     MOCK_GET_ORDER_HISTORY_PAGE_1,
     MOCK_GET_ORDER_HISTORY_PAGE_2
 )
+
 
 @pytest.fixture
 def order_manager(tmp_path):
@@ -375,13 +375,18 @@ class TestUpdateOrders:
         }
 
         order_manager._order_store.order_exists = MagicMock(return_value=True)
-        
-        with patch.object(order_manager, "_notify_order_closed") as mock_notify:
+
+        with patch.object(
+            order_manager, "_notify_order_closed"
+        ) as mock_notify:
             order_manager.update_orders()
             mock_notify.assert_not_called()
-        
+
         remaining_open_keys = {o.publicKey for o in order_manager.open_orders}
-        assert "2Y2g4DimTfAaSc95B5GGYAVz8nhUB2X7p21uUTY226Jd" in remaining_open_keys
+        assert (
+            "2Y2g4DimTfAaSc95B5GGYAVz8nhUB2X7p21uUTY226Jd"
+            in remaining_open_keys
+        )
 
 
 class TestOrderClosedObserver:
@@ -394,25 +399,6 @@ class TestOrderClosedObserver:
             notifications.append("order123")
 
         order_manager._order_closed_observer.register("order123", observer)
-
-        dummy_closed_order = ClosedOrder(
-            userPubkey="dummy_user",
-            orderKey="order123",
-            inputMint=usdc.address,
-            outputMint=fartcoin.address,
-            makingAmount=Decimal("100"),
-            takingAmount=Decimal("100"),
-            remainingMakingAmount=Decimal("0"),
-            remainingTakingAmount=Decimal("0"),
-            expiredAt=None,
-            createdAt=datetime.now(),
-            updatedAt=datetime.now(),
-            status="closed",
-            openTx="dummy_opentx",
-            closeTx="dummy_closetx",
-            programVersion="v1",
-            trades=[]
-        )
 
         order_manager._notify_order_closed("order123")
         assert "order123" in notifications
@@ -437,28 +423,9 @@ class TestOrderClosedObserver:
         assert "order456" not in notifications1
         assert "order456" in notifications2
 
-
     def test_order_closed_observer_no_observers(
         self, order_manager, usdc, fartcoin
     ):
-        dummy_closed_order = ClosedOrder(
-            userPubkey="dummy_user",
-            orderKey="order789",
-            inputMint=usdc.address,
-            outputMint=fartcoin.address,
-            makingAmount=Decimal("300"),
-            takingAmount=Decimal("300"),
-            remainingMakingAmount=Decimal("0"),
-            remainingTakingAmount=Decimal("0"),
-            expiredAt=None,
-            createdAt=datetime.now(),
-            updatedAt=datetime.now(),
-            status="closed",
-            openTx="dummy_opentx",
-            closeTx="dummy_closetx",
-            programVersion="v1",
-            trades=[]
-        )
         try:
             order_manager._notify_order_closed("order789")
         except Exception as e:
