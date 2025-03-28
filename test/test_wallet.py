@@ -1,8 +1,10 @@
 
 import pytest
+from pydantic import ValidationError
 from decimal import Decimal
 from solders.pubkey import Pubkey
 from unittest.mock import MagicMock
+from solders.keypair import Keypair
 from src.tokens import Token
 from src.wallet import Wallet
 from src.solana_rpc import SolanaRPC
@@ -86,6 +88,20 @@ class TestWallet:
 
         with pytest.raises(TypeError):
             wallet.get_token_quantity(1)
+
+    def test_wallet_stores_keypair(self):
+        dummy_keypair = Keypair()
+        wallet = Wallet(keypair=dummy_keypair)
+        assert wallet.keypair is dummy_keypair
+
+    def test_wallet_accepts_either_address_or_keypair_but_not_both(self):
+        wallet_a = Wallet(address=str(Pubkey.new_unique()))
+        wallet_b = Wallet(keypair=Keypair())
+        with pytest.raises(ValidationError):
+            wallet_c = Wallet(
+                address=str(Pubkey.new_unique()),
+                keypair=Keypair()
+            )
 
     def test_update_tokens_success(self, monkeypatch, token_library):
         wallet = Wallet(address=str(Pubkey.new_unique()))
