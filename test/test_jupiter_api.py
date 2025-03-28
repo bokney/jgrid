@@ -6,7 +6,7 @@ from decimal import Decimal
 from solders.keypair import Keypair
 from unittest.mock import patch, MagicMock
 from solders.transaction import VersionedTransaction
-from src.jupiter_api import JupiterLimitOrderAPI, OpenOrder, ClosedOrder
+from src.jupiter_api import JupiterLimitOrderAPI
 from src.wallet import Wallet
 from mock_api_responses import (
     MOCK_GET_OPEN_ORDERS,
@@ -78,7 +78,7 @@ class TestSignAndSendTransaction:
     ):
         dummy_serialized = b"dummy_serialized"
         dummy_tx_base64 = base64.b64encode(dummy_serialized).decode("utf-8")
-        
+
         dummy_tx = MagicMock()
         dummy_tx.message = "dummy_message"
         with patch.object(
@@ -96,7 +96,7 @@ class TestSignAndSendTransaction:
                 result = api_instance._sign_and_send_transaction(
                     dummy_wallet, dummy_tx_base64
                 )
-        
+
         assert result == "tx_signature"
         api_instance._rpc_client.send_raw_transaction.assert_called_once()
 
@@ -109,7 +109,7 @@ class TestBase:
         dummy_result.value = "dummy_tx_signature"
         rpc_client.send_raw_transaction.return_value = dummy_result
         return rpc_client
-    
+
     @pytest.fixture(autouse=True)
     def setup_api(self, dummy_rpc_client):
         self.api = JupiterLimitOrderAPI()
@@ -124,13 +124,6 @@ class TestBase:
     def dummy_wallet(self, dummy_keypair):
         return Wallet(keypair=dummy_keypair)
 
-    @pytest.fixture
-    def dummy_rpc_client(self):
-        rpc_client = MagicMock()
-        dummy_result = MagicMock()
-        dummy_result.value = "dummy_tx_signature"
-        rpc_client.send_raw_transaction.return_value = dummy_result
-        return rpc_client
 
 class TestCreateLimitOrder(TestBase):
     @pytest.fixture
@@ -672,7 +665,7 @@ class TestCancelOrder(TestBase):
             wallet=dummy_wallet,
             maker="maker_address"
         )
-        
+
         assert isinstance(result, list)
         assert result == ["dummy_cancel_signature"]
         mock_post.assert_called_once()
@@ -719,8 +712,10 @@ class TestGetOrderHistory(TestBase):
         mock_response = MagicMock()
         mock_response.status_code = 400
         mock_response.text = "Bad Request"
-        
-        mock_response.raise_for_status.side_effect = requests.HTTPError("400 Client Error")
+
+        mock_response.raise_for_status.side_effect = requests.HTTPError(
+            "400 Client Error"
+        )
         mock_response.json.return_value = error_data
         mock_get.return_value = mock_response
 
@@ -773,7 +768,7 @@ class TestGetOrderHistory(TestBase):
         params = mock_get.call_args.kwargs.get("params")
         assert params is not None
         assert params["wallet"] == dummy_wallet.address
-        assert params["page"] == 3  
+        assert params["page"] == 3
         mock_get.assert_called_once()
 
     @patch("src.jupiter_api.requests.get")
@@ -827,7 +822,6 @@ class TestGetOrderHistory(TestBase):
             assert result[0].orderKey == orders_list[0]["orderKey"]
         mock_get.assert_called_once()
 
-
     @patch("src.jupiter_api.requests.get")
     def test_get_order_history_non_json_error_response(
         self, mock_get, dummy_wallet
@@ -863,7 +857,6 @@ class TestGetOpenOrders(TestBase):
             assert result[0].publicKey == orders_data[0]["publicKey"]
         mock_get.assert_called_once()
 
-
     @patch("src.jupiter_api.requests.get")
     def test_get_open_orders_failure(self, mock_get, dummy_wallet):
         error_data = {"error": "Invalid wallet address"}
@@ -875,10 +868,9 @@ class TestGetOpenOrders(TestBase):
         mock_response.json.return_value = error_data
         mock_get.return_value = mock_response
 
-        with pytest.raises(Exception) as exc_info:
+        with pytest.raises(Exception):
             self.api.get_open_orders(wallet=dummy_wallet)
         mock_get.assert_called_once()
-
 
     @patch("src.jupiter_api.requests.get")
     def test_get_open_orders_empty_response(self, mock_get, dummy_wallet):
@@ -964,7 +956,10 @@ class TestGetOpenOrders(TestBase):
 
         with pytest.raises(Exception) as exc_info:
             self.api.get_open_orders(wallet=dummy_wallet)
-        assert "Internal Server Error" in str(exc_info.value) or "No JSON" in str(exc_info.value)
+        assert (
+            "Internal Server Error" in str(exc_info.value)
+            or "No JSON" in str(exc_info.value)
+        )
         mock_get.assert_called_once()
 
     @patch("src.jupiter_api.requests.get")
