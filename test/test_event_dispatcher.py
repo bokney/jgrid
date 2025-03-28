@@ -79,8 +79,8 @@ class TestEventDispatcher:
             pytest.fail(f"Notify with no observers raised an error: {e}")
 
     def test_observers_notified_in_order_of_registration(
-            self, event_dispatcher, observer_list
-        ):
+        self, event_dispatcher, observer_list
+    ):
         def observer1():
             observer_list.append("Observer1 called")
 
@@ -94,8 +94,8 @@ class TestEventDispatcher:
         assert observer_list == ["Observer1 called", "Observer2 called"]
 
     def test_exception_in_observer_propagates_if_required(
-            self, event_dispatcher, failing_observer
-        ):
+        self, event_dispatcher, failing_observer
+    ):
         event_dispatcher.register(failing_observer)
         with pytest.raises(ValueError, match="Intentional observer failure"):
             event_dispatcher.notify()
@@ -115,6 +115,7 @@ class TestKeyedEventDispatcher:
     ):
         key = "uniqueKey"
         keyed_event_dispatcher.register(key, dummy_observer)
+
         def another_observer():
             pass
         keyed_event_dispatcher.register(key, another_observer)
@@ -142,6 +143,7 @@ class TestKeyedEventDispatcher:
         self, keyed_event_dispatcher, dummy_observer, observer_list
     ):
         key = "uniqueKey"
+
         def observer():
             observer_list.append("keyed called")
         keyed_event_dispatcher.register(key, observer)
@@ -152,6 +154,7 @@ class TestKeyedEventDispatcher:
         self, keyed_event_dispatcher, dummy_observer, observer_list
     ):
         key = "uniqueKey"
+
         def observer():
             observer_list.append("keyed called")
         keyed_event_dispatcher.register(key, observer)
